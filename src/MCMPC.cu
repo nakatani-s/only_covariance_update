@@ -90,10 +90,10 @@ __global__ void setup_init_Covariance(float *Mat)
     if(threadIdx.x == blockIdx.x)
     {
         Mat[id] = 1.0f;
-        values[threadIdx.x] = 1.0f;
+        //values[threadIdx.x] = 1.0f;
     }else{
         Mat[id] = 0.0f;
-        values[threadIdx.x] = 0.0f;
+        //values[threadIdx.x] = 0.0f;
     }
     __syncthreads();
     /*if(threadIdx.x == 0)
@@ -228,9 +228,9 @@ __global__ void Using_Thrust_MCMPC_Linear(float x, float y, float w, curandState
     {
             z[t_x] = gen_u(seq, devs, 0, 1.0f);
             //z[t_x] = gen_u(seq, devs, d_Datas[0].Input[t_x], var);
-            seq += HORIZON;
+            seq += N_OF_SAMPLES;
+            __syncthreads();
     }
-    __syncthreads();
     for(int t = 0; t < HORIZON; t++)
     {
         //block_var = var;
@@ -302,7 +302,7 @@ __global__ void Using_Thrust_MCMPC_Pendulum(float x, float th, float dx, float d
     for(int t = 0; t < HORIZON; t++)
     {
         //block_var = var;
-        __syncthreads();
+        //__syncthreads();
         //printf("id == %d -> z[%d]==%f\n",id, t, z[t]);
         u[t] = generate_u(t, d_Datas[0].Input[t] /*ここが影響している可能性*/, var, d_cov, z); //ここが影響している可能性
         if(isnan(u[t])){
@@ -326,7 +326,9 @@ __global__ void Using_Thrust_MCMPC_Pendulum(float x, float th, float dx, float d
             th -= (2 * M_PI);
         while (th < -M_PI)
             th += (2 * M_PI);
-        //printf("id = %d :: u[%d] = %f x = %f th = %f\n", id, t, u[t], x, th);
+        /*if(id == 1000 || id == 1001){
+          printf("id = %d :: u[%d] = %f x = %f th = %f\n", id, t, u[t], x, th);
+        }*/
         qx = x * x * d_matrix[0] + th * th * d_matrix[1] + dx * dx * d_matrix[2] + dth * dth * d_matrix[3] + d_matrix[4] * u[t] * u[t];
         /*qx = x * x * d_matrix[0] + y * y * d_matrix[1] + w * w * d_matrix[2] + d_matrix[3]*u[t]*u[t];*/
         
@@ -354,7 +356,7 @@ __global__ void Using_Thrust_MCMPC_Pendulum(float x, float th, float dx, float d
     }
     float KL_COST, S, lambda;
     // lambda = HORIZON * dim_state;
-    lambda = HORIZON * 20;
+    lambda = 4 * HORIZON;
     //lambda = 10.0f;
     S = total_cost / lambda;
     KL_COST = exp(-S);

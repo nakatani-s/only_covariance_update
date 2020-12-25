@@ -21,7 +21,7 @@ __global__ void make_Diagonalization(float *vec, float *mat)
 }
 
 
-__global__ void calc_Var_Cov_matrix(float *d_mat,Data1 *d_Data, float *Us_dev, int Blocks)
+__global__ void calc_Var_Cov_matrix(float *d_mat,Data1 *d_Data, float *Us_dev, const int Blocks)
 {
     unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
     float pows;
@@ -39,7 +39,7 @@ __global__ void calc_Var_Cov_matrix(float *d_mat,Data1 *d_Data, float *Us_dev, i
     }*/
     __syncthreads();
     
-    d_mat[id] = pows  /(Blocks - 1);
+    d_mat[id] = pows  / 99/*(Blocks - 1)*/;
 
     //unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
     //float values;

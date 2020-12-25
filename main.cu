@@ -20,7 +20,7 @@
 #include "include/CMAFunctionsForMCMPC.cuh"
 
 //#define Linear
-#define Covariance_Update_by_Elite_sample
+//#define Covariance_Update_by_Elite_sample
 
 void printMatrix(int m, int n, float*A, int lda, const char* name)
 {
@@ -197,6 +197,7 @@ int main(int argc, char **argv)
     float weight_denominator = 0.0f; 
     for(int time = 0; time < TIME; time++){
         var = Variavility;
+        setup_init_Covariance<<<HORIZON, HORIZON>>>(d_hat_Q);
         for(int repeat = 0; repeat < Recalc; repeat++){
             // var = Variavility * pow(0.8,repeat);
             //var = Variavility;
@@ -233,8 +234,13 @@ int main(int argc, char **argv)
             CMA_check_symmetric<<<HORIZON,HORIZON>>>(device_cov, device_diag_eig);//device_covは強制的に対称行列に変換
             cudaDeviceSynchronize();
 #ifdef Pendulum
+            //setup_init_Covariance<<<HORIZON, HORIZON>>>(device_cov);
+            //cudaDeviceSynchronize();
+            //cudaMemcpy(h_hat_Q, device_cov, sizeof(float)*lda*m, cudaMemcpyDeviceToHost);
+            //printMatrix(m,m,h_hat_Q, lda, "0_mat");
             Using_Thrust_MCMPC_Pendulum<<<numBlocks, THREAD_PER_BLOCKS>>>(state[0], state[1], state[2], state[3], devStates, d_Input_vec, 
             var, Blocks, device_cov, device_param, device_constraint, device_matrix, thrust::raw_pointer_cast( cost_device_vec_for_sorting.data() ));
+            thrust::sequence( indices_device_vec.begin(), indices_device_vec.end() );
 #else
             Using_Thrust_MCMPC_Linear<<<numBlocks, THREAD_PER_BLOCKS>>>(state[0],state[1],state[2],devStates, d_Input_vec, var, Blocks, device_cov, device_param, device_matrix, thrust::raw_pointer_cast( cost_device_vec_for_sorting.data() ));
             thrust::sequence( indices_device_vec.begin(), indices_device_vec.end() );
@@ -242,6 +248,7 @@ int main(int argc, char **argv)
             printf("loop====%d=======\n", repeat);
             thrust::sort_by_key( cost_device_vec_for_sorting.begin(), cost_device_vec_for_sorting.end(), indices_device_vec.begin() );
             callback_elite_sample<<<CMA_mu,1>>>(d_dataFromBlocks, d_Input_vec, thrust::raw_pointer_cast( indices_device_vec.data() ));
+            cudaDeviceSynchronize();
 #else
             MCMPC_GPU_Linear_Example<<<numBlocks, THREAD_PER_BLOCKS>>>(state[0],state[1],state[2], devStates, d_dataFromBlocks, var, Blocks, d_hat_Q, device_param, device_matrix);
             cudaDeviceSynchronize();
@@ -253,15 +260,17 @@ int main(int argc, char **argv)
 
 #ifdef Covariance_Update_by_Elite_sample
             weighted_mean(h_dataFromBlocks, CMA_mu, Us_host);
-            cudaMemcpy(Us_device, Us_host, sizeof(Data1) * numBlocks, cudaMemcpyHostToDevice);
+            cudaMemcpy(Us_device, Us_host, sizeof(float) * HORIZON, cudaMemcpyHostToDevice);
             calc_Var_Cov_matrix<<<HORIZON,HORIZON>>>(d_hat_Q, d_dataFromBlocks, Us_device, CMA_mu);
             cudaDeviceSynchronize();
             tanspose<<<HORIZON,HORIZON>>>(device_cov, d_hat_Q);//対称行列となっているかの判別に使用
             cudaDeviceSynchronize();
+            //cudaMemcpy(h_hat_Q, d_hat_Q, sizeof(float)*lda*m, cudaMemcpyDeviceToHost);
+            //printMatrix(m,m,h_hat_Q, lda, "C");
             CMA_check_symmetric<<<HORIZON,HORIZON>>>(d_hat_Q, device_cov);//d_hat_Qを強制的に対称行列に変換
             cudaDeviceSynchronize();
-            before_var = var;
-            var = Variavility * pow(0.95,repeat);//進化分散を計算
+            //before_var = var;
+            //var = Variavility * pow(0.95,repeat);//進化分散を計算
 #else
 
             CMA_weighted_mean(h_dataFromBlocks, CMA_mu, Dy_host);
@@ -323,7 +332,7 @@ int main(int argc, char **argv)
             cudaDeviceSynchronize();
 
             //進化共分散行列の計算
-            CMA_update_covariance_matrix<<<HORIZON,HORIZON>>>(d_hat_Q, d_A, device_diag_eig, 0.5, 0.5); //c1 = 0.2 c_mu = 0.8に対応
+            CMA_update_covariance_matrix<<<HORIZON,HORIZON>>>(d_hat_Q, d_A, device_diag_eig, 0.1, 0.8); //c1 = 0.2 c_mu = 0.8に対応
             cudaDeviceSynchronize();
             tanspose<<<HORIZON,HORIZON>>>(device_cov, d_hat_Q);//対称行列となっているかの判別に使用
             cudaDeviceSynchronize();
@@ -333,7 +342,8 @@ int main(int argc, char **argv)
             //printMatrix(m,m,h_hat_Q, lda, "C");
 
             //推定解の計算
-            CMA_estimate_mean(Us_host, Dy_host, before_var);
+            //CMA_estimate_mean(Us_host, Dy_host, before_var);
+            weighted_mean(h_dataFromBlocks, CMA_mu, Us_host);
             cudaMemcpy(Us_device, Us_host, sizeof(float) * HORIZON, cudaMemcpyHostToDevice);
 #endif            
             //進化共分散の平方根の計算
